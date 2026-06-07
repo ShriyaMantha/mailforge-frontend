@@ -1,0 +1,1 @@
+{"status":"ok","service":"MailForge API","version":"1.0.0"}

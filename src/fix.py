@@ -1,0 +1,7 @@
+﻿content = open('App.jsx', 'r').read()
+content = content.replace('const EMAILJS_SERVICE_ID = "YOUR_SERVICE_ID";', 'const API = "https://mailforge-backend-production.up.railway.app";')
+content = content.replace('\nconst EMAILJS_TEMPLATE_ID = "YOUR_TEMPLATE_ID";', '')
+content = content.replace('\nconst EMAILJS_PUBLIC_KEY = "YOUR_PUBLIC_KEY";', '')
+content = content.replace('import { useState, useEffect, useRef } from "react";', 'import { useState, useEffect } from "react";')
+open('App.jsx', 'w').write(content)
+print('Done!')
