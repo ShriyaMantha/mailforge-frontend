@@ -463,9 +463,10 @@ function CampaignsPage() {
   );
 }
 
-function SettingsPage({ user }) {
+function SettingsPage({ user, onUserUpdate }) {
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState(null);
+
   const connectGmail = async () => {
     setLoading(true);
     try {
@@ -473,6 +474,15 @@ function SettingsPage({ user }) {
       window.location.href = data.auth_url;
     } catch (e) { setToast({ msg: e.message, type: "error" }); setLoading(false); }
   };
+
+  const disconnectGmail = async () => {
+    try {
+      await apiFetch("/gmail/disconnect", { method: "DELETE", headers: authHeaders() });
+      onUserUpdate({ ...user, gmail_connected: false });
+      setToast({ msg: "Gmail disconnected.", type: "default" });
+    } catch (e) { setToast({ msg: e.message, type: "error" }); }
+  };
+
   return (
     <div>
       <div className="page-title">Settings</div>
@@ -486,7 +496,12 @@ function SettingsPage({ user }) {
       </div>
       <div className="section-card">
         <div className="section-head">Gmail integration</div>
-        {user.gmail_connected ? <span className="connected-pill">✓ Gmail connected</span> : (
+        {user.gmail_connected ? (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <span className="connected-pill">✓ Gmail connected</span>
+            <button onClick={disconnectGmail} style={{ background: "none", border: "1px solid #e5e3de", borderRadius: 7, padding: "0.4rem 0.9rem", fontSize: 13, color: "#888", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>Disconnect</button>
+          </div>
+        ) : (
           <>
             <p style={{ fontSize: 14, color: "#555", lineHeight: 1.7, marginBottom: "1rem" }}>Connect your Gmail to send cold emails directly from your account.</p>
             <button className="btn-connect" onClick={connectGmail} disabled={loading} style={{ padding: "0.65rem 1.5rem", fontSize: 14 }}>{loading ? "Redirecting to Google…" : "Connect Gmail"}</button>
@@ -517,13 +532,18 @@ function Dashboard({ user: initialUser, onLogout }) {
     setPage("campaigns");
   };
 
+  const handleUserUpdate = (updatedUser) => {
+    setUser(updatedUser);
+    saveUser(updatedUser);
+  };
+
   return (
     <div className="dash">
       <Sidebar active={page} setActive={setPage} user={user} onLogout={onLogout} />
       <div className="main">
         {page === "compose" && <ComposePage user={user} onSent={handleSent} />}
         {page === "campaigns" && <CampaignsPage />}
-        {page === "settings" && <SettingsPage user={user} />}
+        {page === "settings" && <SettingsPage user={user} onUserUpdate={handleUserUpdate} />}
       </div>
     </div>
   );
@@ -535,8 +555,23 @@ export default function App() {
     const u = getUser();
     return token && u ? u : null;
   });
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("gmail") === "connected" && getToken()) {
+      apiFetch("/auth/me", { headers: authHeaders() })
+        .then(data => {
+          setUser(data);
+          saveUser(data);
+          window.history.replaceState({}, "", window.location.pathname);
+        })
+        .catch(() => {});
+    }
+  }, []);
+
   const handleLogin = (u) => setUser(u);
   const handleLogout = () => { clearToken(); clearUser(); setUser(null); };
+
   return (
     <>
       <style>{styles}</style>
