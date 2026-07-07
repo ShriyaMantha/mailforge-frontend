@@ -37,6 +37,11 @@ const styles = `
   .btn-primary:hover { opacity: 0.85; }
   .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
   .err { font-size: 13px; color: #c0392b; margin-top: 0.75rem; text-align: center; }
+  .ok { font-size: 13px; color: #27ae60; margin-top: 0.75rem; text-align: center; }
+  .forgot-link-row { display: flex; justify-content: space-between; align-items: center; margin-top: 1rem; }
+  .link-btn { background: none; border: none; padding: 0; font-size: 12.5px; color: #888; cursor: pointer; font-family: 'DM Sans', sans-serif; text-decoration: underline; }
+  .link-btn:hover { color: #1a1916; }
+  .link-btn:disabled { opacity: 0.5; cursor: not-allowed; }
   .dash { display: flex; min-height: 100vh; }
   .sidebar { width: 220px; background: #fff; border-right: 1px solid #e5e3de; padding: 1.5rem 1.25rem; display: flex; flex-direction: column; position: fixed; height: 100vh; }
   .sidebar-logo { font-family: 'DM Serif Display', serif; font-size: 18px; color: #1a1916; margin-bottom: 2rem; }
@@ -87,6 +92,13 @@ const styles = `
   .preview-body { padding: 1rem; border-top: 1px solid #e5e3de; }
   .preview-subject { font-size: 13px; font-weight: 600; color: #1a1916; margin-bottom: 0.75rem; }
   .preview-text { font-size: 13px; color: #444; line-height: 1.7; white-space: pre-wrap; }
+  .preview-edit-label { font-size: 11px; font-weight: 500; color: #888; text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 0.35rem; display: block; }
+  .preview-edit-subject { width: 100%; padding: 0.55rem 0.75rem; border: 1px solid #ddd; border-radius: 7px; font-size: 13.5px; font-weight: 600; font-family: 'DM Sans', sans-serif; background: #fafaf8; color: #1a1916; outline: none; transition: border 0.15s; margin-bottom: 1rem; }
+  .preview-edit-subject:focus { border-color: #1a1916; background: #fff; }
+  .preview-edit-subject:disabled, .preview-edit-body:disabled { opacity: 0.6; cursor: not-allowed; }
+  .preview-edit-body { width: 100%; min-height: 160px; padding: 0.75rem; border: 1px solid #ddd; border-radius: 7px; font-size: 13px; line-height: 1.7; font-family: 'DM Sans', sans-serif; color: #1a1916; background: #fafaf8; outline: none; resize: vertical; transition: border 0.15s; }
+  .preview-edit-body:focus { border-color: #1a1916; background: #fff; }
+  .preview-edit-hint { font-size: 11.5px; color: #aaa; margin-top: 0.5rem; }
   .status-badge { font-size: 11px; padding: 2px 8px; border-radius: 20px; font-weight: 500; }
   .badge-pending { background: #fef3cd; color: #856404; }
   .badge-sent { background: #d1f0e0; color: #155724; }
@@ -118,13 +130,19 @@ function Toast({ msg, type = "default", onClose }) {
 }
 
 function AuthPage({ onLogin }) {
-  const [tab, setTab] = useState("login");
+  const [tab, setTab] = useState("login"); // "login" | "register" | "forgot"
+  const [forgotStep, setForgotStep] = useState(1); // 1 = request code, 2 = enter code + new password
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [pass, setPass] = useState("");
+  const [resetCode, setResetCode] = useState("");
+  const [newPass, setNewPass] = useState("");
   const [err, setErr] = useState("");
+  const [ok, setOk] = useState("");
   const [loading, setLoading] = useState(false);
-  const reset = () => setErr("");
+  const reset = () => { setErr(""); setOk(""); };
+
+  const goToTab = (t) => { setTab(t); setForgotStep(1); reset(); };
 
   const handleLogin = async () => {
     reset();
@@ -149,22 +167,52 @@ function AuthPage({ onLogin }) {
     finally { setLoading(false); }
   };
 
+  const handleForgotRequest = async () => {
+    reset();
+    if (!email) { setErr("Enter the email on your account."); return; }
+    setLoading(true);
+    try {
+      await apiFetch("/auth/forgot-password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email }) });
+      setOk("If that email has an account, a 6-digit code is on its way. Check your inbox.");
+      setForgotStep(2);
+    } catch (e) { setErr(e.message); }
+    finally { setLoading(false); }
+  };
+
+  const handleResetPassword = async () => {
+    reset();
+    if (!resetCode || !newPass) { setErr("Enter the code and a new password."); return; }
+    if (newPass.length < 6) { setErr("Password must be at least 6 characters."); return; }
+    setLoading(true);
+    try {
+      const data = await apiFetch("/auth/reset-password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, code: resetCode, new_password: newPass }) });
+      saveToken(data.token); saveUser(data.user); onLogin(data.user);
+    } catch (e) { setErr(e.message); }
+    finally { setLoading(false); }
+  };
+
   return (
     <div className="auth-wrap">
       <div className="auth-card">
         <div className="auth-logo">MailForge</div>
         <div className="auth-sub">AI-powered cold outreach, personalised.</div>
-        <div className="auth-tabs">
-          <button className={`auth-tab ${tab === "login" ? "active" : ""}`} onClick={() => { setTab("login"); reset(); }}>Sign in</button>
-          <button className={`auth-tab ${tab === "register" ? "active" : ""}`} onClick={() => { setTab("register"); reset(); }}>Create account</button>
-        </div>
-        {tab === "login" ? (
+        {tab !== "forgot" && (
+          <div className="auth-tabs">
+            <button className={`auth-tab ${tab === "login" ? "active" : ""}`} onClick={() => goToTab("login")}>Sign in</button>
+            <button className={`auth-tab ${tab === "register" ? "active" : ""}`} onClick={() => goToTab("register")}>Create account</button>
+          </div>
+        )}
+
+        {tab === "login" && (
           <>
             <div className="field"><label>Email</label><input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" onKeyDown={e => e.key === "Enter" && handleLogin()} /></div>
             <div className="field"><label>Password</label><input type="password" value={pass} onChange={e => setPass(e.target.value)} placeholder="••••••••" onKeyDown={e => e.key === "Enter" && handleLogin()} /></div>
+            <div style={{ textAlign: "right", marginTop: "-0.5rem" }}><button className="link-btn" onClick={() => goToTab("forgot")}>Forgot password?</button></div>
             <button className="btn-primary" onClick={handleLogin} disabled={loading}>{loading ? <><span className="spinner"></span>Signing in…</> : "Sign in"}</button>
           </>
-        ) : (
+        )}
+
+        {tab === "register" && (
           <>
             <div className="field"><label>Full name</label><input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Alex Johnson" /></div>
             <div className="field"><label>Email</label><input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" /></div>
@@ -172,7 +220,31 @@ function AuthPage({ onLogin }) {
             <button className="btn-primary" onClick={handleRegister} disabled={loading}>{loading ? <><span className="spinner"></span>Creating account…</> : "Create account"}</button>
           </>
         )}
+
+        {tab === "forgot" && forgotStep === 1 && (
+          <>
+            <div className="auth-sub" style={{ marginBottom: "1.5rem" }}>Enter your account email and we'll send a 6-digit reset code.</div>
+            <div className="field"><label>Email</label><input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" onKeyDown={e => e.key === "Enter" && handleForgotRequest()} /></div>
+            <button className="btn-primary" onClick={handleForgotRequest} disabled={loading}>{loading ? <><span className="spinner"></span>Sending code…</> : "Send reset code"}</button>
+            <div className="forgot-link-row" style={{ justifyContent: "center" }}><button className="link-btn" onClick={() => goToTab("login")}>Back to sign in</button></div>
+          </>
+        )}
+
+        {tab === "forgot" && forgotStep === 2 && (
+          <>
+            <div className="auth-sub" style={{ marginBottom: "1.5rem" }}>Enter the code sent to {email} and choose a new password.</div>
+            <div className="field"><label>Reset code</label><input type="text" inputMode="numeric" maxLength={6} value={resetCode} onChange={e => setResetCode(e.target.value.replace(/\D/g, ""))} placeholder="123456" /></div>
+            <div className="field"><label>New password</label><input type="password" value={newPass} onChange={e => setNewPass(e.target.value)} placeholder="At least 6 characters" onKeyDown={e => e.key === "Enter" && handleResetPassword()} /></div>
+            <button className="btn-primary" onClick={handleResetPassword} disabled={loading}>{loading ? <><span className="spinner"></span>Resetting…</> : "Reset password and sign in"}</button>
+            <div className="forgot-link-row">
+              <button className="link-btn" onClick={handleForgotRequest} disabled={loading}>Resend code</button>
+              <button className="link-btn" onClick={() => goToTab("login")}>Back to sign in</button>
+            </div>
+          </>
+        )}
+
         {err && <div className="err">{err}</div>}
+        {ok && <div className="ok">{ok}</div>}
       </div>
     </div>
   );
@@ -238,6 +310,7 @@ function ComposePage({ user, onSent }) {
   const addRow = () => setProspects(p => [...p, emptyProspect()]);
   const removeRow = id => setProspects(p => p.filter(r => r.id !== id));
   const updateRow = (id, field, val) => setProspects(p => p.map(r => r.id === id ? { ...r, [field]: val } : r));
+  const updatePreview = (i, field, val) => setPreviews(prev => prev.map((p, idx) => idx === i ? { ...p, [field]: val } : p));
 
   const handleGenerate = async () => {
     if (!goal.trim()) { setToast({ msg: "Please enter an outreach goal.", type: "error" }); return; }
@@ -317,8 +390,21 @@ function ComposePage({ user, onSent }) {
                 </div>
                 {openIdx === i && (
                   <div className="preview-body">
-                    <div className="preview-subject">Subject: {p.subject}</div>
-                    <div className="preview-text">{p.body}</div>
+                    <label className="preview-edit-label">Subject</label>
+                    <input
+                      className="preview-edit-subject"
+                      value={p.subject}
+                      disabled={p.status === "sent"}
+                      onChange={e => updatePreview(i, "subject", e.target.value)}
+                    />
+                    <label className="preview-edit-label">Body</label>
+                    <textarea
+                      className="preview-edit-body"
+                      value={p.body}
+                      disabled={p.status === "sent"}
+                      onChange={e => updatePreview(i, "body", e.target.value)}
+                    />
+                    {p.status !== "sent" && <div className="preview-edit-hint">Edits are saved automatically and used when you send.</div>}
                   </div>
                 )}
               </div>
@@ -377,10 +463,9 @@ function CampaignsPage() {
   );
 }
 
-function SettingsPage({ user, onUserUpdate }) {
+function SettingsPage({ user }) {
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState(null);
-
   const connectGmail = async () => {
     setLoading(true);
     try {
@@ -388,15 +473,6 @@ function SettingsPage({ user, onUserUpdate }) {
       window.location.href = data.auth_url;
     } catch (e) { setToast({ msg: e.message, type: "error" }); setLoading(false); }
   };
-
-  const disconnectGmail = async () => {
-    try {
-      await apiFetch("/gmail/disconnect", { method: "DELETE", headers: authHeaders() });
-      onUserUpdate({ ...user, gmail_connected: false, gmail_refresh_token: null });
-      setToast({ msg: "Gmail disconnected.", type: "default" });
-    } catch (e) { setToast({ msg: e.message, type: "error" }); }
-  };
-
   return (
     <div>
       <div className="page-title">Settings</div>
@@ -410,12 +486,7 @@ function SettingsPage({ user, onUserUpdate }) {
       </div>
       <div className="section-card">
         <div className="section-head">Gmail integration</div>
-        {user.gmail_connected ? (
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <span className="connected-pill">✓ Gmail connected</span>
-            <button onClick={disconnectGmail} style={{ background: "none", border: "1px solid #e5e3de", borderRadius: 7, padding: "0.4rem 0.9rem", fontSize: 13, color: "#888", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>Disconnect</button>
-          </div>
-        ) : (
+        {user.gmail_connected ? <span className="connected-pill">✓ Gmail connected</span> : (
           <>
             <p style={{ fontSize: 14, color: "#555", lineHeight: 1.7, marginBottom: "1rem" }}>Connect your Gmail to send cold emails directly from your account.</p>
             <button className="btn-connect" onClick={connectGmail} disabled={loading} style={{ padding: "0.65rem 1.5rem", fontSize: 14 }}>{loading ? "Redirecting to Google…" : "Connect Gmail"}</button>
@@ -437,23 +508,13 @@ function Dashboard({ user: initialUser, onLogout }) {
   const [page, setPage] = useState("compose");
   const [user, setUser] = useState(initialUser);
 
-  // Refresh user from backend on mount
   useEffect(() => {
-    apiFetch("/auth/me", { headers: authHeaders() })
-      .then(data => { setUser(data); saveUser(data); })
-      .catch(() => {});
+    apiFetch("/auth/me", { headers: authHeaders() }).then(data => { setUser(data); saveUser(data); }).catch(() => {});
   }, []);
 
   const handleSent = () => {
-    apiFetch("/auth/me", { headers: authHeaders() })
-      .then(data => { setUser(data); saveUser(data); })
-      .catch(() => {});
+    apiFetch("/auth/me", { headers: authHeaders() }).then(data => { setUser(data); saveUser(data); }).catch(() => {});
     setPage("campaigns");
-  };
-
-  const handleUserUpdate = (updatedUser) => {
-    setUser(updatedUser);
-    saveUser(updatedUser);
   };
 
   return (
@@ -462,7 +523,7 @@ function Dashboard({ user: initialUser, onLogout }) {
       <div className="main">
         {page === "compose" && <ComposePage user={user} onSent={handleSent} />}
         {page === "campaigns" && <CampaignsPage />}
-        {page === "settings" && <SettingsPage user={user} onUserUpdate={handleUserUpdate} />}
+        {page === "settings" && <SettingsPage user={user} />}
       </div>
     </div>
   );
@@ -474,25 +535,8 @@ export default function App() {
     const u = getUser();
     return token && u ? u : null;
   });
-
-  // Handle Gmail OAuth callback redirect — ?gmail=connected
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("gmail") === "connected" && getToken()) {
-      apiFetch("/auth/me", { headers: authHeaders() })
-        .then(data => {
-          setUser(data);
-          saveUser(data);
-          // Clean up the query string from the URL
-          window.history.replaceState({}, "", window.location.pathname);
-        })
-        .catch(() => {});
-    }
-  }, []);
-
   const handleLogin = (u) => setUser(u);
   const handleLogout = () => { clearToken(); clearUser(); setUser(null); };
-
   return (
     <>
       <style>{styles}</style>
