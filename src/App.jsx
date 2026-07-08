@@ -1,4 +1,5 @@
 ﻿import { useState, useEffect } from "react";
+import PrivacyPolicy from "./PrivacyPolicy";
 
 const API = "https://mailforge-backend-production.up.railway.app";
 
@@ -571,6 +572,18 @@ export default function App() {
 
   const handleLogin = (u) => setUser(u);
   const handleLogout = () => { clearToken(); clearUser(); setUser(null); };
+
+  // Public route — must work without login, for Google's OAuth verification review
+  if (window.location.pathname === "/privacy") {
+    return (
+      <>
+        <style>{styles}</style>
+        <div className="app">
+          <PrivacyPolicy />
+        </div>
+      </>
+    );
+  }
 
   return (
     <>
