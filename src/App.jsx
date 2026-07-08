@@ -1,5 +1,6 @@
 ﻿import { useState, useEffect } from "react";
 import PrivacyPolicy from "./PrivacyPolicy";
+import TermsOfService from "./TermsOfService";
 
 const API = "https://mailforge-backend-production.up.railway.app";
 
@@ -584,6 +585,16 @@ export default function App() {
       </>
     );
   }
+  if (window.location.pathname === "/terms") {
+  return (
+    <>
+      <style>{styles}</style>
+      <div className="app">
+        <TermsOfService />
+      </div>
+    </>
+  );
+}
 
   return (
     <>
